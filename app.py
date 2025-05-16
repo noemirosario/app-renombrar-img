@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import csv
 import io
-import shutil
 import zipfile
 from PIL import Image
 import cv2
@@ -18,8 +17,11 @@ alto_px = int((alto_cm / 2.54) * dpi)
 # === Subida de archivos ===
 imagenes = st.file_uploader("Sube las imágenes originales (.jpg)", type=["jpg"], accept_multiple_files=True)
 archivo_csv = st.file_uploader("Sube el CSV con nuevos nombres", type=["csv"])
+
 formato = st.selectbox("Formato de salida", ["jpg", "psd"])
 
+# === Preguntar qué desea hacer ===
+accion = st.radio("¿Qué deseas hacer?", ["Solo renombrar imágenes", "Renombrar y procesar (recorte, fondo blanco, etc.)"])
 
 # === Función de procesamiento ===
 def procesar_imagen(imagen_pil):
@@ -51,9 +53,8 @@ def procesar_imagen(imagen_pil):
     imagen_final = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
     return imagen_final
 
-
 # === Botón de ejecución ===
-if st.button("Renombrar y Procesar"):
+if st.button("Ejecutar"):
     if not imagenes or not archivo_csv:
         st.error("⚠️ Sube imágenes y el archivo CSV.")
     else:
@@ -66,8 +67,7 @@ if st.button("Renombrar y Procesar"):
                 nuevos_nombres.append(nombre_salida)
 
         if len(nuevos_nombres) != len(imagenes):
-            st.warning(
-                f"⚠️ Atención: {len(imagenes)} imágenes pero {len(nuevos_nombres)} nombres en CSV. Se usará el mínimo.")
+            st.warning(f"⚠️ Atención: {len(imagenes)} imágenes pero {len(nuevos_nombres)} nombres en CSV. Se usará el mínimo.")
 
         minimo = min(len(nuevos_nombres), len(imagenes))
 
@@ -79,36 +79,27 @@ if st.button("Renombrar y Procesar"):
                 nombre_final = nuevos_nombres[i]
 
                 imagen_pil = Image.open(imagen_file)
-                img_procesada = procesar_imagen(imagen_pil)
 
-                if img_procesada is None:
-                    st.error(f"❌ No se pudo procesar: {imagen_file.name}")
-                    continue
+                if accion == "Renombrar y procesar (recorte, fondo blanco, etc.)":
+                    img_resultado = procesar_imagen(imagen_pil)
+                    if img_resultado is None:
+                        st.error(f"❌ No se pudo procesar: {imagen_file.name}")
+                        continue
+                else:
+                    # Solo renombrar (sin procesar)
+                    img_resultado = imagen_pil.convert("RGB")
 
-                # Guardar como JPG siempre, renombrar extensión si es PSD
+                # Guardar como JPG siempre, cambiar extensión si es PSD
                 img_buffer = io.BytesIO()
-                img_procesada.save(img_buffer, format="JPEG", dpi=(dpi, dpi))
+                img_resultado.save(img_buffer, format="JPEG", dpi=(dpi, dpi))
                 img_buffer.seek(0)
 
                 ext = "psd" if formato == "psd" else "jpg"
                 zip_file.writestr(f"{nombre_final}.{ext}", img_buffer.read())
 
-                st.success(f"✅ Procesado: {nombre_final}.{ext}")
+                st.success(f"✅ Guardado: {nombre_final}.{ext}")
 
-        st.download_button("📥 Descargar ZIP", data=buffer_zip.getvalue(), file_name="imagenes_procesadas.zip")
+        st.download_button("📥 Descargar ZIP", data=buffer_zip.getvalue(), file_name="imagenes_resultado.zip")
 
         st.balloons()
-        st.success("🎉 Proceso completo.")
-
-"""
-1227639,1227639.psd	image
-1227640,1227640.psd	image2
-1227641,1227641.psd	image3
-1227638,1227638.psd	image4
-947265,947265.psd	image5
-1099351,1099351.psd	image6
-1172417,1172417.psd	image7
-179643,179643.psd	image8
-1173693,1173693.psd	image9
-952677,952677.psd	image10
-"""
+        st.success("🎉 Proceso completado.")
