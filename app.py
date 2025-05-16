@@ -1,65 +1,104 @@
+import streamlit as st
 import os
 import csv
-from PIL import Image
+import io
 import shutil
+import zipfile
+from PIL import Image
+import cv2
+import numpy as np
 
-# Configuración de rutas
-carpeta_entrada = r"C:\Users\Juan\Downloadsn\SIE\SIE\img"
-archivo_csv = r"C:\Users\Juan\Downloads\SIE\SIE\SIE_Prueba.csv"
-carpeta_salida = r"C:\Users\Juan\Downloads\SIE\SIE\Img Renombradas"
+# === Configuración inicial ===
+st.title("🖼️ Renombrar y Procesar Imágenes (JPG/PSD)")
 
-# Crear carpeta de salida
-os.makedirs(carpeta_salida, exist_ok=True)
+ancho_cm, alto_cm, dpi = 22, 23, 300
+ancho_px = int((ancho_cm / 2.54) * dpi)
+alto_px = int((alto_cm / 2.54) * dpi)
 
-# Elegir formato de salida
-formato = input("¿Deseas guardar como 'jpg' o 'psd'? ").strip().lower()
-if formato not in ['jpg', 'psd']:
-    raise ValueError("Formato inválido. Solo se permite 'jpg' o 'psd'.")
+# === Subida de archivos ===
+imagenes = st.file_uploader("Sube las imágenes originales (.jpg)", type=["jpg"], accept_multiple_files=True)
+archivo_csv = st.file_uploader("Sube el CSV con nuevos nombres", type=["csv"])
+formato = st.selectbox("Formato de salida", ["jpg", "psd"])
 
-# Leer nombres deseados desde la columna 2 del CSV
-nuevos_nombres = []
-with open(archivo_csv, newline='', encoding='utf-8') as f:
-    lector_csv = csv.reader(f)
-    for fila in lector_csv:
-        if len(fila) > 1:
-            nombre_salida = fila[1].strip().replace(".psd", "")
-            nuevos_nombres.append(nombre_salida)
 
-# Listar imágenes en orden de nombre (image.jpg, image2.jpg)
-imagenes_entrada = sorted(
-    [f for f in os.listdir(carpeta_entrada) if f.lower().endswith(".jpg")],
-    key=lambda x: int(''.join(filter(str.isdigit, x)) or 0)  # Ordenar por número
-)
+# === Función de procesamiento ===
+def procesar_imagen(imagen_pil):
+    imagen = cv2.cvtColor(np.array(imagen_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
 
-# Validar longitud
-if len(nuevos_nombres) != len(imagenes_entrada):
-    print(f"Número de imágenes ({len(imagenes_entrada)}) y nombres en CSV ({len(nuevos_nombres)}) no coinciden.")
-    print("Se usará el mínimo.")
-    minimo = min(len(nuevos_nombres), len(imagenes_entrada))
-    nuevos_nombres = nuevos_nombres[:minimo]
-    imagenes_entrada = imagenes_entrada[:minimo]
+    gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+    _, mascara = cv2.threshold(gris, 240, 255, cv2.THRESH_BINARY_INV)
 
-# === Renombrar imágenes ===
-for i in range(len(nuevos_nombres)):
-    nombre_img = imagenes_entrada[i]
-    nuevo_nombre = nuevos_nombres[i]
-    ruta_original = os.path.join(carpeta_entrada, nombre_img)
-    ruta_salida = os.path.join(carpeta_salida, f"{nuevo_nombre}.{formato}")
+    contornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contornos:
+        return None
+    c = max(contornos, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(c)
 
-    try:
-        if formato == 'jpg':
-            with Image.open(ruta_original) as img:
-                img = img.convert("RGB")
-                img.save(ruta_salida, format='JPEG')
-        else:  # Solo cambiar extensión a .psd sin modificar el archivo real
-            shutil.copyfile(ruta_original, ruta_salida)
+    zapato = imagen[y:y + h, x:x + w]
+    factor_escala = ancho_px / w
+    nuevo_alto = int(h * factor_escala)
+    zapato_escalado = cv2.resize(zapato, (ancho_px, nuevo_alto), interpolation=cv2.INTER_LINEAR)
 
-        print(f"✅ {nombre_img} → {nuevo_nombre}.{formato}")
-    except Exception as e:
-        print(f"Error con {nombre_img}: {e}")
+    canvas = np.ones((alto_px, ancho_px, 3), dtype=np.uint8) * 255
+    offset_y = (alto_px - nuevo_alto) // 2
 
-print("\nTodas las imágenes fueron renombradas y guardadas.")
+    if offset_y < 0:
+        zapato_escalado = zapato_escalado[-offset_y: -offset_y + alto_px, :]
+        offset_y = 0
 
+    canvas[offset_y:offset_y + zapato_escalado.shape[0], 0:ancho_px] = zapato_escalado
+
+    imagen_final = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+    return imagen_final
+
+
+# === Botón de ejecución ===
+if st.button("Renombrar y Procesar"):
+    if not imagenes or not archivo_csv:
+        st.error("⚠️ Sube imágenes y el archivo CSV.")
+    else:
+        nuevos_nombres = []
+        archivo_csv.seek(0)
+        lector_csv = csv.reader(archivo_csv.read().decode("utf-8").splitlines())
+        for fila in lector_csv:
+            if len(fila) > 1:
+                nombre_salida = fila[1].strip().replace(".psd", "").replace(".jpg", "")
+                nuevos_nombres.append(nombre_salida)
+
+        if len(nuevos_nombres) != len(imagenes):
+            st.warning(
+                f"⚠️ Atención: {len(imagenes)} imágenes pero {len(nuevos_nombres)} nombres en CSV. Se usará el mínimo.")
+
+        minimo = min(len(nuevos_nombres), len(imagenes))
+
+        # === Crear ZIP con resultados ===
+        buffer_zip = io.BytesIO()
+        with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for i in range(minimo):
+                imagen_file = imagenes[i]
+                nombre_final = nuevos_nombres[i]
+
+                imagen_pil = Image.open(imagen_file)
+                img_procesada = procesar_imagen(imagen_pil)
+
+                if img_procesada is None:
+                    st.error(f"❌ No se pudo procesar: {imagen_file.name}")
+                    continue
+
+                # Guardar como JPG siempre, renombrar extensión si es PSD
+                img_buffer = io.BytesIO()
+                img_procesada.save(img_buffer, format="JPEG", dpi=(dpi, dpi))
+                img_buffer.seek(0)
+
+                ext = "psd" if formato == "psd" else "jpg"
+                zip_file.writestr(f"{nombre_final}.{ext}", img_buffer.read())
+
+                st.success(f"✅ Procesado: {nombre_final}.{ext}")
+
+        st.download_button("📥 Descargar ZIP", data=buffer_zip.getvalue(), file_name="imagenes_procesadas.zip")
+
+        st.balloons()
+        st.success("🎉 Proceso completo.")
 
 """
 1227639,1227639.psd	image
