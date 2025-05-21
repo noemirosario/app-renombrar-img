@@ -14,6 +14,11 @@ st.title("🖼️ Renombrar y Procesar Imágenes (JPG/PSD)")
 ancho_cm, alto_cm, dpi = 22, 23, 300
 ancho_px = int((ancho_cm / 2.54) * dpi)
 alto_px = int((alto_cm / 2.54) * dpi)
+margen_cm = 1
+margen_px = int((margen_cm / 2.54) * dpi)  # convierte cm a pixeles
+ancho_disp = ancho_px - 2 * margen_px
+alto_disp = alto_px - 2 * margen_px
+
 
 # === Formato de entrada ===
 formato_entrada = st.selectbox("Formato de las imágenes que vas a subir", ["jpg", "psd"])
@@ -48,18 +53,27 @@ def procesar_imagen(imagen_pil):
     x, y, w, h = cv2.boundingRect(c)
 
     zapato = imagen[y:y + h, x:x + w]
-    factor_escala = ancho_px / w
-    nuevo_alto = int(h * factor_escala)
-    zapato_escalado = cv2.resize(zapato, (ancho_px, nuevo_alto), interpolation=cv2.INTER_LINEAR)
 
+    # Margen deseado en cm → px
+    margen_cm = 0.3
+    margen_px = int((margen_cm / 2.54) * dpi)
+    ancho_disp = ancho_px - 2 * margen_px
+    alto_disp = alto_px - 2 * margen_px
+
+    # Escalado respetando el borde
+    factor_escala = min(ancho_disp / w, alto_disp / h)
+    nuevo_ancho = int(w * factor_escala)
+    nuevo_alto = int(h * factor_escala)
+
+    zapato_escalado = cv2.resize(zapato, (nuevo_ancho, nuevo_alto), interpolation=cv2.INTER_LINEAR)
+
+    # Canvas blanco
     canvas = np.ones((alto_px, ancho_px, 3), dtype=np.uint8) * 255
+
+    offset_x = (ancho_px - nuevo_ancho) // 2
     offset_y = (alto_px - nuevo_alto) // 2
 
-    if offset_y < 0:
-        zapato_escalado = zapato_escalado[-offset_y: -offset_y + alto_px, :]
-        offset_y = 0
-
-    canvas[offset_y:offset_y + zapato_escalado.shape[0], 0:ancho_px] = zapato_escalado
+    canvas[offset_y:offset_y + nuevo_alto, offset_x:offset_x + nuevo_ancho] = zapato_escalado
 
     imagen_final = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
     return imagen_final
