@@ -147,8 +147,3 @@ if st.button("Ejecutar"):
         st.download_button("📥 Descargar ZIP", data=buffer_zip.getvalue(), file_name="imagenes_resultado.zip")
         st.balloons()
         st.success("🎉 Proceso completado.")
-
-
-# mis imagenes estan numerados por img11, img12, y asi , es decir van incrementando. Quiero poder pasarle un rango a mi app
-# ejemolo img_inicio =  11, img_fin = 18, debe tomar esas filas de mi csv para renombrar, aunq eudebes considerar que la lista
-# contiene un encabezado, es decir que si te digo img_inicio =  11 en realiadad en el csv sera la fila 12, ya que tenemos el encabezado
