@@ -31,11 +31,6 @@ img_fin = st.number_input("Imagen final a procesar", min_value=img_inicio)
 fila_inicio_excel = img_inicio + 1
 fila_fin_excel = img_fin + 1
 
-def cargar_psd_como_pil(file):
-    psd = PSDImage.open(file)
-    composed = psd.composite()
-    return composed.convert("RGB")
-
 def procesar_imagen(imagen_pil):
     imagen = cv2.cvtColor(np.array(imagen_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
     gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
