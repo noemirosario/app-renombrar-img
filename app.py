@@ -54,25 +54,6 @@ def procesar_imagen(imagen_pil):
     canvas[offset_y:offset_y + nuevo_alto, offset_x:offset_x + nuevo_ancho] = zapato_escalado
     return Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-def comprimir_imagen_a_120kb(imagen_pil, max_kb=120, dpi=(300, 300)):
-    calidad = 95  # calidad inicial
-    paso = 5
-    buffer = io.BytesIO()
-
-    while calidad > 5:
-        buffer.seek(0)
-        buffer.truncate()
-        imagen_pil.save(buffer, format="JPEG", quality=calidad, dpi=dpi)
-        size_kb = buffer.tell() / 1024
-
-        if size_kb <= max_kb:
-            buffer.seek(0)
-            return buffer
-
-        calidad -= paso
-
-    buffer.seek(0)
-    return buffer  # devuelve lo mejor logrado, aunque exceda los 120 KB
 
 if st.button("Ejecutar"):
     if not imagenes or not archivo_csv:
@@ -133,7 +114,6 @@ if st.button("Ejecutar"):
                 else:
                     img_resultado = imagen_pil
 
-                img_buffer = comprimir_imagen_a_120kb(img_resultado, max_kb=120, dpi=(dpi, dpi))
                 ext = "psd" if formato_salida == "psd" else "jpg"
                 zip_file.writestr(f"{nombre_final}.{ext}", img_buffer.read())
 
