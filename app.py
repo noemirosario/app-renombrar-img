@@ -6,10 +6,10 @@ import zipfile
 from PIL import Image
 import cv2
 import numpy as np
-from psd_tools import PSDImage
 
-st.title("🖼️ Renombrar y Procesar Imágenes (JPG/PSD)")
+st.title("🖼️ Renombrar y Procesar Imágenes (solo JPG)")
 
+# Parámetros de impresión y márgenes
 ancho_cm, alto_cm, dpi = 22, 23, 300
 ancho_px = int((ancho_cm / 2.54) * dpi)
 alto_px = int((alto_cm / 2.54) * dpi)
@@ -18,16 +18,15 @@ margen_px = int((margen_cm / 2.54) * dpi)
 ancho_disp = ancho_px - 2 * margen_px
 alto_disp = alto_px - 2 * margen_px
 
-formato_entrada = st.selectbox("Formato de las imágenes que vas a subir", ["jpg", "psd"])
-imagenes = st.file_uploader(f"Sube las imágenes originales (*.{formato_entrada})", type=[formato_entrada], accept_multiple_files=True)
+# Entradas del usuario
+imagenes = st.file_uploader("Sube las imágenes originales (.jpg)", type=["jpg"], accept_multiple_files=True)
 archivo_csv = st.file_uploader("Sube el CSV con nuevos nombres", type=["csv"])
-formato_salida = st.selectbox("Formato de salida", ["jpg", "psd"])
 accion = st.radio("¿Qué deseas hacer?", ["Solo renombrar imágenes", "Renombrar y procesar (recorte, fondo blanco, etc.)"])
 
 img_inicio = st.number_input("Imagen inicial a procesar", min_value=1)
 img_fin = st.number_input("Imagen final a procesar", min_value=img_inicio)
 
-# Inferimos automáticamente el rango de filas en el CSV, ajustado por encabezado
+# Ajuste para lectura de CSV
 fila_inicio_excel = img_inicio + 1
 fila_fin_excel = img_fin + 1
 
@@ -54,7 +53,6 @@ def procesar_imagen(imagen_pil):
     canvas[offset_y:offset_y + nuevo_alto, offset_x:offset_x + nuevo_ancho] = zapato_escalado
     return Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-
 if st.button("Ejecutar"):
     if not imagenes or not archivo_csv:
         st.error("⚠️ Sube imágenes y el archivo CSV.")
@@ -63,7 +61,7 @@ if st.button("Ejecutar"):
         lector_csv = list(csv.reader(archivo_csv.read().decode("utf-8").splitlines()))
         datos_csv = lector_csv[1:]  # Omitimos encabezado
 
-        # Crear un diccionario imagen_num -> archivo de imagen
+        # Diccionario imagen_num -> archivo de imagen
         imagen_dict = {}
         for img in imagenes:
             nombre = os.path.splitext(img.name)[0]
@@ -76,19 +74,19 @@ if st.button("Ejecutar"):
         numeros_validos.sort()  # asegurar orden ascendente
         sub_imagenes = [imagen_dict[n] for n in numeros_validos]
 
-        # Obtener nombres desde el CSV según los números
+        # Obtener nuevos nombres desde el CSV
         nuevos_nombres = []
         for n in numeros_validos:
-            indice_csv = n  # ya que encabezado está en la primera fila, img11 está en fila 12
+            indice_csv = n
             if 0 <= indice_csv - 1 < len(datos_csv):
                 fila = datos_csv[indice_csv - 1]
                 if len(fila) > 1:
-                    nombre_salida = fila[1].strip().replace(".psd", "").replace(".jpg", "")
+                    nombre_salida = fila[1].strip().replace(".jpg", "")
                     nuevos_nombres.append(nombre_salida)
 
         if len(nuevos_nombres) != len(sub_imagenes):
             st.warning(f"⚠️ Atención: {len(sub_imagenes)} imágenes pero {len(nuevos_nombres)} nombres. Se usará el mínimo.")
-
+        
         minimo = min(len(nuevos_nombres), len(sub_imagenes))
         buffer_zip = io.BytesIO()
 
@@ -98,10 +96,7 @@ if st.button("Ejecutar"):
                 nombre_final = nuevos_nombres[i]
 
                 try:
-                    if formato_entrada == "psd":
-                        imagen_pil = cargar_psd_como_pil(imagen_file)
-                    else:
-                        imagen_pil = Image.open(imagen_file).convert("RGB")
+                    imagen_pil = Image.open(imagen_file).convert("RGB")
                 except Exception as e:
                     st.error(f"❌ Error cargando {imagen_file.name}: {e}")
                     continue
@@ -114,10 +109,11 @@ if st.button("Ejecutar"):
                 else:
                     img_resultado = imagen_pil
 
-                ext = "psd" if formato_salida == "psd" else "jpg"
-                zip_file.writestr(f"{nombre_final}.{ext}")
-
-                st.success(f"✅ Guardado: {nombre_final}.{ext}")
+                img_buffer = io.BytesIO()
+                img_resultado.save(img_buffer, format="JPEG", quality=95)
+                img_buffer.seek(0)
+                zip_file.writestr(f"{nombre_final}.jpg", img_buffer.read())
+                st.success(f"✅ Guardado: {nombre_final}.jpg")
 
         st.download_button("📥 Descargar ZIP", data=buffer_zip.getvalue(), file_name="imagenes_resultado.zip")
         st.balloons()
