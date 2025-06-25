@@ -81,7 +81,7 @@ if st.button("Ejecutar"):
             if 0 <= indice_csv - 1 < len(datos_csv):
                 fila = datos_csv[indice_csv - 1]
                 if len(fila) > 1:
-                    nombre_salida = fila[1].strip().replace(".jpg", "")
+                    nombre_salida = os.path.splitext(fila[1].strip())[0]
                     nuevos_nombres.append(nombre_salida)
 
         if len(nuevos_nombres) != len(sub_imagenes):
