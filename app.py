@@ -115,7 +115,7 @@ if st.button("Ejecutar"):
                     img_resultado = imagen_pil
 
                 ext = "psd" if formato_salida == "psd" else "jpg"
-                zip_file.writestr(f"{nombre_final}.{ext}", img_buffer.read())
+                zip_file.writestr(f"{nombre_final}.{ext}")
 
                 st.success(f"✅ Guardado: {nombre_final}.{ext}")
 
